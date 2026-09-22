@@ -1,0 +1,16 @@
+# Ignore large binary Android/iOS/Desktop build files
+*.apk
+*.aab
+*.zip
+*.tar.gz
+apk_build/
+build/app/
+android/
+ios/
+windows/
+macos/
+linux/
+.dart_tool/
+.gradle/
+.git/
+test/
