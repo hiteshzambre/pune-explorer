@@ -80,7 +80,6 @@ class _AdminHeritageWalksScreenState extends ConsumerState<AdminHeritageWalksScr
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.emerald),
               onPressed: () async {
-                final repo = ref.read(destinationRepositoryProvider);
                 final cover = currentImages.isNotEmpty ? currentImages.first : 'https://images.unsplash.com/photo-1599661046289-e31897846e41?q=80&w=1200';
                 final gallery = currentImages.length > 1 ? currentImages.skip(1).toList() : <String>[];
                 final updated = HeritageWalk(
@@ -121,28 +120,37 @@ class _AdminHeritageWalksScreenState extends ConsumerState<AdminHeritageWalksScr
 
               final messenger = ScaffoldMessenger.of(context);
               Navigator.of(ctx).pop();
-              if (isNew) {
-                await repo.addHeritageWalk(updated);
-              } else {
-                await repo.updateHeritageWalk(updated);
-              }
+              try {
+                final notifier = ref.read(heritageWalksCatalogProvider.notifier);
+                if (isNew) {
+                  await notifier.addHeritageWalk(updated);
+                } else {
+                  await notifier.updateHeritageWalk(updated);
+                }
 
-              setState(() {});
+                try {
+                  final admin = ref.read(adminSessionProvider);
+                  await ref.read(auditLogsProvider.notifier).log(
+                    actorEmail: admin.email.isNotEmpty ? admin.email : 'admin@puneexplorer.in',
+                    actorRole: admin.role,
+                    action: isNew ? 'CREATE_HERITAGE_WALK' : 'UPDATE_HERITAGE_WALK',
+                    resourceType: 'HERITAGE_WALK',
+                    resourceId: updated.id,
+                    metadata: {'title': updated.title, 'price': updated.price},
+                  );
+                } catch (_) {}
 
-              final admin = ref.read(adminSessionProvider);
-              await ref.read(auditLogsProvider.notifier).log(
-                actorEmail: admin.email.isNotEmpty ? admin.email : 'admin@puneexplorer.in',
-                actorRole: admin.role,
-                action: isNew ? 'CREATE_HERITAGE_WALK' : 'UPDATE_HERITAGE_WALK',
-                resourceType: 'HERITAGE_WALK',
-                resourceId: updated.id,
-                metadata: {'title': updated.title, 'price': updated.price},
-              );
-
-              if (mounted) {
-                messenger.showSnackBar(
-                  SnackBar(content: Text('Heritage Walk "${updated.title}" saved!'), backgroundColor: AppColors.emerald),
-                );
+                if (mounted) {
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Heritage Walk "${updated.title}" saved! Live across app.'), backgroundColor: AppColors.emerald),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Notice: $e'), backgroundColor: Colors.amber.shade900),
+                  );
+                }
               }
             },
             child: const Text('Save Walk', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
@@ -274,8 +282,12 @@ class _AdminHeritageWalksScreenState extends ConsumerState<AdminHeritageWalksScr
                             icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 20),
                             tooltip: 'Delete Walk',
                             onPressed: () async {
-                              await ref.read(destinationRepositoryProvider).deleteHeritageWalk(walk.id);
-                              setState(() {});
+                              await ref.read(heritageWalksCatalogProvider.notifier).deleteHeritageWalk(walk.id);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Deleted "${walk.title}"'), backgroundColor: AppColors.emerald),
+                                );
+                              }
                             },
                           ),
                         ],

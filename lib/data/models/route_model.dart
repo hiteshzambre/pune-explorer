@@ -97,4 +97,40 @@ class RouteCircuit {
         'highlights': highlights,
         'pitstops': pitstops,
       };
+
+  RouteCircuit copyWith({
+    String? id,
+    String? title,
+    String? subtitle,
+    String? badge,
+    String? icon,
+    RouteWaypoint? from,
+    RouteWaypoint? to,
+    List<RouteWaypoint>? waypoints,
+    double? distanceKm,
+    String? durationFormatted,
+    String? difficulty,
+    String? bestTime,
+    List<String>? highlights,
+    List<String>? pitstops,
+  }) {
+    return RouteCircuit(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      subtitle: subtitle ?? this.subtitle,
+      badge: badge ?? this.badge,
+      icon: icon ?? this.icon,
+      from: from ?? this.from,
+      to: to ?? this.to,
+      waypoints: waypoints ?? this.waypoints,
+      distanceKm: distanceKm ?? this.distanceKm,
+      durationFormatted: durationFormatted ?? this.durationFormatted,
+      difficulty: difficulty ?? this.difficulty,
+      bestTime: bestTime ?? this.bestTime,
+      highlights: highlights ?? this.highlights,
+      pitstops: pitstops ?? this.pitstops,
+    );
+  }
 }
+
+

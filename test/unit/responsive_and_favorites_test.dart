@@ -7,6 +7,8 @@ import 'package:pune_explorer/core/widgets/custom_button.dart';
 import 'package:pune_explorer/features/booking/presentation/booking_screen.dart';
 import 'package:pune_explorer/features/booking/presentation/booking_confirmation_screen.dart';
 import 'package:pune_explorer/features/booking/presentation/digital_ticket_screen.dart';
+import 'package:pune_explorer/data/models/destination.dart';
+import 'package:pune_explorer/data/repositories/destination_repository.dart';
 import 'package:pune_explorer/features/journey/presentation/journey_mode_screen.dart';
 
 void main() {
@@ -25,10 +27,41 @@ void main() {
     });
 
     test('Faceted search matches city and category labels', () async {
-      final container = ProviderContainer();
+      final mockRepo = LocalDestinationRepository();
+      await mockRepo.addDestination(Destination.fromJson({
+        'id': 'dest_lonavala',
+        'name': 'Lonavala Hill Station',
+        'city': 'Pune',
+        'state': 'Lonavala',
+        'category': 'hillStation',
+        'description': 'Popular weekend hill station',
+        'longDescription': 'Popular weekend hill station with scenic views',
+        'images': ['https://example.com/lonavala.jpg'],
+        'rating': 4.6,
+      }));
+      await mockRepo.addDestination(Destination.fromJson({
+        'id': 'dest_sinhagad',
+        'name': 'Sinhagad Fort',
+        'city': 'Pune',
+        'state': 'Maharashtra',
+        'category': 'forts',
+        'description': 'Historic Maratha hill fort',
+        'longDescription': 'Historic Maratha hill fort with Tanaji Malusare memorial',
+        'famousFor': 'Maratha Fort History',
+        'images': ['https://example.com/sinhagad.jpg'],
+        'rating': 4.8,
+        'trending': true,
+        'featured': true,
+      }));
+
+      final container = ProviderContainer(
+        overrides: [
+          destinationRepositoryProvider.overrideWithValue(mockRepo),
+        ],
+      );
       addTearDown(container.dispose);
 
-      // Await future provider to load seed destinations
+      // Await future provider to load destinations
       await container.read(destinationsAsyncProvider.future);
 
       // Search for 'Lonavala'
@@ -45,7 +78,26 @@ void main() {
     });
 
     test('Memoized trending and featured destinations providers return cached subsets', () async {
-      final container = ProviderContainer();
+      final mockRepo = LocalDestinationRepository();
+      await mockRepo.addDestination(Destination.fromJson({
+        'id': 'dest_trending',
+        'name': 'Trending Destination',
+        'city': 'Pune',
+        'state': 'Maharashtra',
+        'category': 'forts',
+        'description': 'Popular fort',
+        'longDescription': 'Popular fort in Sahyadris',
+        'images': <String>[],
+        'rating': 4.9,
+        'trending': true,
+        'featured': true,
+      }));
+
+      final container = ProviderContainer(
+        overrides: [
+          destinationRepositoryProvider.overrideWithValue(mockRepo),
+        ],
+      );
       addTearDown(container.dispose);
 
       await container.read(destinationsAsyncProvider.future);
@@ -125,7 +177,8 @@ void main() {
         ),
       );
 
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(tester.takeException(), isNull);
       expect(find.byType(BookingScreen), findsOneWidget);
     });

@@ -90,10 +90,32 @@ enum DestinationCategory {
   }
 
   static DestinationCategory fromString(String? val) {
-    if (val == null) return DestinationCategory.all;
+    if (val == null || val.trim().isEmpty) return DestinationCategory.all;
+    final lower = val.toLowerCase().trim();
+    if (lower == 'historical' || lower == 'fort' || lower == 'forts' || lower == 'museum') {
+      return DestinationCategory.forts;
+    }
+    if (lower == 'religious' || lower == 'spiritual' || lower == 'temple' || lower == 'temples') {
+      return DestinationCategory.spiritual;
+    }
+    if (lower == 'nature' || lower == 'lakes' || lower == 'waterfalls' || lower == 'ghats' || lower == 'lakesnature') {
+      return DestinationCategory.lakesNature;
+    }
+    if (lower == 'hillstation' || lower == 'hills') {
+      return DestinationCategory.hillStation;
+    }
+    if (lower == 'adventure' || lower == 'trek' || lower == 'treks') {
+      return DestinationCategory.adventure;
+    }
+    if (lower == 'weekendgetaway' || lower == 'getaway') {
+      return DestinationCategory.weekendGetaway;
+    }
+    if (lower == 'city' || lower == 'food' || lower == 'culture') {
+      return DestinationCategory.city;
+    }
     for (var cat in DestinationCategory.values) {
-      if (cat.name.toLowerCase() == val.toLowerCase() ||
-          cat.label.toLowerCase().contains(val.toLowerCase())) {
+      if (cat.name.toLowerCase() == lower ||
+          cat.label.toLowerCase().contains(lower)) {
         return cat;
       }
     }

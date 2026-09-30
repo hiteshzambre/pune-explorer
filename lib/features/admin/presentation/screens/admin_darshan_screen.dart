@@ -20,18 +20,19 @@ class _AdminDarshanScreenState extends ConsumerState<AdminDarshanScreen> {
     final item = waypoints.removeAt(index);
     waypoints.insert(newIndex, item);
 
-    await ref.read(destinationRepositoryProvider).reorderRouteStops(route.id, waypoints);
-    setState(() {});
+    await ref.read(routesCatalogProvider.notifier).reorderRouteStops(route.id, waypoints);
 
-    final admin = ref.read(adminSessionProvider);
-    await ref.read(auditLogsProvider.notifier).log(
-      actorEmail: admin.email.isNotEmpty ? admin.email : 'admin@puneexplorer.in',
-      actorRole: admin.role,
-      action: 'REORDER_DARSHAN_STOPS',
-      resourceType: 'ROUTE_CIRCUIT',
-      resourceId: route.id,
-      metadata: {'movedStop': item.name, 'from': index + 1, 'to': newIndex + 1},
-    );
+    try {
+      final admin = ref.read(adminSessionProvider);
+      await ref.read(auditLogsProvider.notifier).log(
+        actorEmail: admin.email.isNotEmpty ? admin.email : 'admin@puneexplorer.in',
+        actorRole: admin.role,
+        action: 'REORDER_DARSHAN_STOPS',
+        resourceType: 'ROUTE_CIRCUIT',
+        resourceId: route.id,
+        metadata: {'movedStop': item.name, 'from': index + 1, 'to': newIndex + 1},
+      );
+    } catch (_) {}
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -104,8 +105,7 @@ class _AdminDarshanScreenState extends ConsumerState<AdminDarshanScreen> {
 
               final updatedWaypoints = [...route.waypoints, newWaypoint];
               Navigator.of(ctx).pop();
-              await ref.read(destinationRepositoryProvider).reorderRouteStops(route.id, updatedWaypoints);
-              setState(() {});
+              await ref.read(routesCatalogProvider.notifier).reorderRouteStops(route.id, updatedWaypoints);
 
               if (mounted) {
                 messenger.showSnackBar(
@@ -122,14 +122,12 @@ class _AdminDarshanScreenState extends ConsumerState<AdminDarshanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<RouteCircuit>>(
-      future: ref.read(destinationRepositoryProvider).getRoutes(),
-      builder: (context, snapshot) {
-        final routes = snapshot.data ?? [];
-        final darshanRoute = routes.isNotEmpty ? routes.first : null;
+    final routesAsync = ref.watch(routesAsyncProvider);
+    final routes = routesAsync.value ?? [];
+    final darshanRoute = routes.isNotEmpty ? routes.first : null;
 
-        return Scaffold(
-          backgroundColor: const Color(0xFF0B1120),
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B1120),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -255,7 +253,6 @@ class _AdminDarshanScreenState extends ConsumerState<AdminDarshanScreen> {
             ),
           ),
         );
-      },
-    );
   }
 }
+

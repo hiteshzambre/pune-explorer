@@ -125,7 +125,6 @@ class _AdminDestinationsScreenState extends ConsumerState<AdminDestinationsScree
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.emerald),
               onPressed: () async {
                 final messenger = ScaffoldMessenger.of(context);
-                final repo = ref.read(destinationRepositoryProvider);
                 final updatedDest = Destination(
                   id: destination?.id ?? 'dest_${DateTime.now().millisecondsSinceEpoch}',
                   name: nameCtrl.text.trim(),
@@ -158,31 +157,44 @@ class _AdminDestinationsScreenState extends ConsumerState<AdminDestinationsScree
                 );
 
                 Navigator.of(ctx).pop();
-                if (isNew) {
-                  await repo.addDestination(updatedDest);
-                } else {
-                  await repo.updateDestination(updatedDest);
-                }
+                try {
+                  final notifier = ref.read(destinationsCatalogProvider.notifier);
+                  if (isNew) {
+                    await notifier.addDestination(updatedDest);
+                  } else {
+                    await notifier.updateDestination(updatedDest);
+                  }
 
-                ref.invalidate(destinationsAsyncProvider);
+                  try {
+                    final admin = ref.read(adminSessionProvider);
+                    await ref.read(auditLogsProvider.notifier).log(
+                      actorEmail: admin.email.isNotEmpty ? admin.email : 'admin@puneexplorer.in',
+                      actorRole: admin.role,
+                      action: isNew ? 'CREATE_DESTINATION' : 'UPDATE_DESTINATION',
+                      resourceType: 'DESTINATION',
+                      resourceId: updatedDest.id,
+                      metadata: {'name': updatedDest.name, 'category': updatedDest.category.name},
+                    );
+                  } catch (_) {}
 
-                final admin = ref.read(adminSessionProvider);
-                await ref.read(auditLogsProvider.notifier).log(
-                  actorEmail: admin.email.isNotEmpty ? admin.email : 'admin@puneexplorer.in',
-                  actorRole: admin.role,
-                  action: isNew ? 'CREATE_DESTINATION' : 'UPDATE_DESTINATION',
-                  resourceType: 'DESTINATION',
-                  resourceId: updatedDest.id,
-                  metadata: {'name': updatedDest.name, 'category': updatedDest.category.name},
-                );
-
-                if (mounted) {
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Text('Destination "${updatedDest.name}" saved! Changes live in Explore & Detail screens.'),
-                      backgroundColor: AppColors.emerald,
-                    ),
-                  );
+                  if (mounted) {
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text('Destination "${updatedDest.name}" saved! Changes live across app.'),
+                        backgroundColor: AppColors.emerald,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text('Notice: Local cache updated. Cloud notice: $e'),
+                        backgroundColor: Colors.amber.shade900,
+                        duration: const Duration(seconds: 4),
+                      ),
+                    );
+                  }
                 }
               },
               child: const Text('Save Destination', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
@@ -343,10 +355,47 @@ class _AdminDestinationsScreenState extends ConsumerState<AdminDestinationsScree
                 }).toList();
 
                 if (filtered.isEmpty) {
+                  final isCatalogEmpty = destinations.isEmpty;
                   return Container(
-                    padding: const EdgeInsets.all(40),
+                    padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
                     alignment: Alignment.center,
-                    child: const Text('No matching destinations found.', style: TextStyle(color: Colors.grey)),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF334155)),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.location_off_rounded, size: 48, color: Color(0xFF64748B)),
+                        const SizedBox(height: 16),
+                        Text(
+                          isCatalogEmpty ? 'No Destinations in Database' : 'No Matching Destinations Found',
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          isCatalogEmpty
+                              ? 'Your catalog is clean and ready. Add official Pune monuments, forts, and getaways.'
+                              : 'Try clearing your search query or choosing "All Categories".',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                        ),
+                        if (isCatalogEmpty) ...[
+                          const SizedBox(height: 20),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.emerald,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            icon: const Icon(Icons.add, color: Colors.white, size: 18),
+                            label: const Text('Add Your First Destination', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                            onPressed: () => _showDestinationForm(context),
+                          ),
+                        ],
+                      ],
+                    ),
                   );
                 }
 
@@ -450,22 +499,71 @@ class _AdminDestinationsScreenState extends ConsumerState<AdminDestinationsScree
                                 context: context,
                                 builder: (ctx) => AlertDialog(
                                   backgroundColor: const Color(0xFF1E293B),
-                                  title: const Text('Delete Destination?', style: TextStyle(color: Colors.white)),
-                                  content: Text('Are you sure you want to remove "${dest.name}" from PuneExplorer?'),
+                                  title: const Row(
+                                    children: [
+                                      Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 24),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Delete Destination Permanently?',
+                                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  content: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Are you sure you want to permanently delete "${dest.name}"?',
+                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.error.withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                                        ),
+                                        child: const Text(
+                                          '⚠️ Warning: This action permanently removes this destination, its highlights, and food spots from Supabase. It cannot be undone.',
+                                          style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 12, height: 1.4),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                   actions: [
-                                    TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                                    TextButton(
+                                      onPressed: () => Navigator.of(ctx).pop(false),
+                                      child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+                                    ),
                                     ElevatedButton(
                                       style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
                                       onPressed: () => Navigator.of(ctx).pop(true),
-                                      child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                                      child: const Text('Delete Permanently', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
                                     ),
                                   ],
                                 ),
                               );
 
                               if (confirm == true) {
-                                await ref.read(destinationRepositoryProvider).deleteDestination(dest.id);
-                                ref.invalidate(destinationsAsyncProvider);
+                                try {
+                                  await ref.read(destinationsCatalogProvider.notifier).deleteDestination(dest.id);
+                                  await ref.read(favoritesProvider.notifier).remove(dest.id);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Successfully deleted "${dest.name}" from database.'), backgroundColor: AppColors.emerald),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Failed to delete: $e'), backgroundColor: AppColors.error),
+                                    );
+                                  }
+                                }
                               }
                             },
                           ),

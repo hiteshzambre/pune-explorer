@@ -25,6 +25,7 @@ import '../../data/repositories/coupon_repository.dart';
 import '../../data/repositories/admin_support_repository.dart';
 import '../../data/repositories/admin_refund_repository.dart';
 import '../../data/repositories/admin_settings_repository.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../supabase/supabase_config.dart';
 import '../../data/repositories/supabase/supabase_auth_repository.dart';
 import '../../data/repositories/supabase/supabase_destination_repository.dart';
@@ -62,11 +63,13 @@ class PreferencesCache {
 }
 
 // ── Repositories & Services Providers ───────────────────────────────────────
+final _sharedLocalDestinationRepo = LocalDestinationRepository();
+
 final destinationRepositoryProvider = Provider<DestinationRepository>((ref) {
   if (SupabaseConfig.isConfigured && SupabaseConfig.isInitialized) {
-    return SupabaseDestinationRepository();
+    return SupabaseDestinationRepository(null, _sharedLocalDestinationRepo);
   }
-  return LocalDestinationRepository();
+  return _sharedLocalDestinationRepo;
 });
 
 final bookingRepositoryProvider = Provider<BookingRepository>((ref) {
@@ -214,11 +217,82 @@ final pendingPaymentVerificationsProvider = Provider<List<PaymentOrder>>((ref) {
 });
 
 
-// ── Destination Catalog & Async State ──────────────────────────────────────
-final destinationsAsyncProvider = FutureProvider<List<Destination>>((ref) async {
-  final repo = ref.watch(destinationRepositoryProvider);
-  return repo.getDestinations();
-});
+// ── Destination Catalog & Reactive Async State ──────────────────────────────
+class DestinationsNotifier extends AsyncNotifier<List<Destination>> {
+  RealtimeChannel? _subscription;
+
+  @override
+  Future<List<Destination>> build() async {
+    final repo = ref.watch(destinationRepositoryProvider);
+
+    // Setup Supabase Realtime synchronization
+    if (SupabaseConfig.isConfigured && SupabaseConfig.isInitialized) {
+      final client = SupabaseConfig.client;
+      if (client != null && _subscription == null) {
+        _subscription = client
+            .channel('public:destinations_realtime')
+            .onPostgresChanges(
+              event: PostgresChangeEvent.all,
+              schema: 'public',
+              table: 'destinations',
+              callback: (payload) {
+                debugPrint('[DestinationsNotifier] Realtime event: ${payload.eventType} on ${payload.table}');
+                ref.invalidateSelf();
+              },
+            );
+        _subscription?.subscribe();
+
+        ref.onDispose(() {
+          _subscription?.unsubscribe();
+          _subscription = null;
+        });
+      }
+    }
+
+    return repo.getDestinations();
+  }
+
+  Future<void> addDestination(Destination destination) async {
+    final current = state.value ?? [];
+    state = AsyncValue.data([destination, ...current.where((d) => d.id != destination.id)]);
+    try {
+      final repo = ref.read(destinationRepositoryProvider);
+      await repo.addDestination(destination);
+    } catch (e) {
+      ref.invalidateSelf();
+      rethrow;
+    }
+  }
+
+  Future<void> updateDestination(Destination destination) async {
+    final current = state.value ?? [];
+    state = AsyncValue.data(current.map((d) => d.id == destination.id ? destination : d).toList());
+    try {
+      final repo = ref.read(destinationRepositoryProvider);
+      await repo.updateDestination(destination);
+    } catch (e) {
+      ref.invalidateSelf();
+      rethrow;
+    }
+  }
+
+  Future<void> deleteDestination(String id) async {
+    final current = state.value ?? [];
+    state = AsyncValue.data(current.where((d) => d.id != id).toList());
+    try {
+      final repo = ref.read(destinationRepositoryProvider);
+      await repo.deleteDestination(id);
+    } catch (e) {
+      ref.invalidateSelf();
+      rethrow;
+    }
+  }
+}
+
+final destinationsAsyncProvider =
+    AsyncNotifierProvider<DestinationsNotifier, List<Destination>>(DestinationsNotifier.new);
+
+final destinationsCatalogProvider = destinationsAsyncProvider;
 
 final trendingDestinationsProvider = Provider<List<Destination>>((ref) {
   final asyncDest = ref.watch(destinationsAsyncProvider);
@@ -252,20 +326,167 @@ final destinationReviewsProvider = FutureProvider.family<List<Review>, String>((
   return repo.getReviews(destId);
 });
 
-final tourPackagesAsyncProvider = FutureProvider<List<TourPackage>>((ref) async {
-  final repo = ref.watch(destinationRepositoryProvider);
-  return repo.getTourPackages();
-});
+// ── Tour Packages Catalog Notifier ──────────────────────────────────────────
+class TourPackagesNotifier extends AsyncNotifier<List<TourPackage>> {
+  @override
+  Future<List<TourPackage>> build() async {
+    final repo = ref.watch(destinationRepositoryProvider);
+    return repo.getTourPackages();
+  }
 
-final routesAsyncProvider = FutureProvider<List<RouteCircuit>>((ref) async {
-  final repo = ref.watch(destinationRepositoryProvider);
-  return repo.getRoutes();
-});
+  Future<void> addTourPackage(TourPackage package) async {
+    final current = state.value ?? [];
+    state = AsyncValue.data([package, ...current.where((p) => p.id != package.id)]);
+    try {
+      final repo = ref.read(destinationRepositoryProvider);
+      await repo.addTourPackage(package);
+    } catch (e) {
+      ref.invalidateSelf();
+      rethrow;
+    }
+  }
 
-final heritageWalksAsyncProvider = FutureProvider<List<HeritageWalk>>((ref) async {
-  final repo = ref.watch(destinationRepositoryProvider);
-  return repo.getHeritageWalks();
-});
+  Future<void> updateTourPackage(TourPackage package) async {
+    final current = state.value ?? [];
+    state = AsyncValue.data(current.map((p) => p.id == package.id ? package : p).toList());
+    try {
+      final repo = ref.read(destinationRepositoryProvider);
+      await repo.updateTourPackage(package);
+    } catch (e) {
+      ref.invalidateSelf();
+      rethrow;
+    }
+  }
+
+  Future<void> deleteTourPackage(String id) async {
+    final current = state.value ?? [];
+    state = AsyncValue.data(current.where((p) => p.id != id).toList());
+    try {
+      final repo = ref.read(destinationRepositoryProvider);
+      await repo.deleteTourPackage(id);
+    } catch (e) {
+      ref.invalidateSelf();
+      rethrow;
+    }
+  }
+}
+
+final tourPackagesAsyncProvider =
+    AsyncNotifierProvider<TourPackagesNotifier, List<TourPackage>>(TourPackagesNotifier.new);
+
+final toursCatalogProvider = tourPackagesAsyncProvider;
+
+// ── Routes & Darshan Catalog Notifier ───────────────────────────────────────
+class RoutesNotifier extends AsyncNotifier<List<RouteCircuit>> {
+  @override
+  Future<List<RouteCircuit>> build() async {
+    final repo = ref.watch(destinationRepositoryProvider);
+    return repo.getRoutes();
+  }
+
+  Future<void> addRoute(RouteCircuit route) async {
+    final current = state.value ?? [];
+    state = AsyncValue.data([route, ...current.where((r) => r.id != route.id)]);
+    try {
+      final repo = ref.read(destinationRepositoryProvider);
+      await repo.addRoute(route);
+    } catch (e) {
+      ref.invalidateSelf();
+      rethrow;
+    }
+  }
+
+  Future<void> updateRoute(RouteCircuit route) async {
+    final current = state.value ?? [];
+    state = AsyncValue.data(current.map((r) => r.id == route.id ? route : r).toList());
+    try {
+      final repo = ref.read(destinationRepositoryProvider);
+      await repo.updateRoute(route);
+    } catch (e) {
+      ref.invalidateSelf();
+      rethrow;
+    }
+  }
+
+  Future<void> reorderRouteStops(String routeId, List<RouteWaypoint> waypoints) async {
+    final current = state.value ?? [];
+    state = AsyncValue.data(current.map((r) => r.id == routeId ? r.copyWith(waypoints: waypoints) : r).toList());
+    try {
+      final repo = ref.read(destinationRepositoryProvider);
+      await repo.reorderRouteStops(routeId, waypoints);
+    } catch (e) {
+      ref.invalidateSelf();
+      rethrow;
+    }
+  }
+
+  Future<void> deleteRoute(String id) async {
+    final current = state.value ?? [];
+    state = AsyncValue.data(current.where((r) => r.id != id).toList());
+    try {
+      final repo = ref.read(destinationRepositoryProvider);
+      await repo.deleteRoute(id);
+    } catch (e) {
+      ref.invalidateSelf();
+      rethrow;
+    }
+  }
+}
+
+final routesAsyncProvider =
+    AsyncNotifierProvider<RoutesNotifier, List<RouteCircuit>>(RoutesNotifier.new);
+
+final routesCatalogProvider = routesAsyncProvider;
+
+// ── Heritage Walks Catalog Notifier ─────────────────────────────────────────
+class HeritageWalksNotifier extends AsyncNotifier<List<HeritageWalk>> {
+  @override
+  Future<List<HeritageWalk>> build() async {
+    final repo = ref.watch(destinationRepositoryProvider);
+    return repo.getHeritageWalks();
+  }
+
+  Future<void> addHeritageWalk(HeritageWalk walk) async {
+    final current = state.value ?? [];
+    state = AsyncValue.data([walk, ...current.where((w) => w.id != walk.id)]);
+    try {
+      final repo = ref.read(destinationRepositoryProvider);
+      await repo.addHeritageWalk(walk);
+    } catch (e) {
+      ref.invalidateSelf();
+      rethrow;
+    }
+  }
+
+  Future<void> updateHeritageWalk(HeritageWalk walk) async {
+    final current = state.value ?? [];
+    state = AsyncValue.data(current.map((w) => w.id == walk.id ? walk : w).toList());
+    try {
+      final repo = ref.read(destinationRepositoryProvider);
+      await repo.updateHeritageWalk(walk);
+    } catch (e) {
+      ref.invalidateSelf();
+      rethrow;
+    }
+  }
+
+  Future<void> deleteHeritageWalk(String id) async {
+    final current = state.value ?? [];
+    state = AsyncValue.data(current.where((w) => w.id != id).toList());
+    try {
+      final repo = ref.read(destinationRepositoryProvider);
+      await repo.deleteHeritageWalk(id);
+    } catch (e) {
+      ref.invalidateSelf();
+      rethrow;
+    }
+  }
+}
+
+final heritageWalksAsyncProvider =
+    AsyncNotifierProvider<HeritageWalksNotifier, List<HeritageWalk>>(HeritageWalksNotifier.new);
+
+final heritageWalksCatalogProvider = heritageWalksAsyncProvider;
 
 // ── Heritage Walk Filter State & Providers ──────────────────────────────────
 class HeritageWalkFilterState {
@@ -594,6 +815,15 @@ class FavoritesNotifier extends StateNotifier<Set<String>> {
       state = {...state}..remove(id);
     } else {
       state = {...state, id};
+    }
+  }
+
+  Future<void> remove(String id) async {
+    _isLoaded = true;
+    if (state.contains(id)) {
+      await OfflineService.toggleFavorite(id);
+      if (!mounted) return;
+      state = {...state}..remove(id);
     }
   }
 

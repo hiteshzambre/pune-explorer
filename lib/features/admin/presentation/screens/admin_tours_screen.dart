@@ -83,7 +83,6 @@ class _AdminToursScreenState extends ConsumerState<AdminToursScreen> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.emerald),
               onPressed: () async {
-                final repo = ref.read(destinationRepositoryProvider);
                 final updated = TourPackage(
                   id: tour?.id ?? 'tour_${DateTime.now().millisecondsSinceEpoch}',
                   title: titleCtrl.text.trim(),
@@ -107,28 +106,37 @@ class _AdminToursScreenState extends ConsumerState<AdminToursScreen> {
 
               final messenger = ScaffoldMessenger.of(context);
               Navigator.of(ctx).pop();
-              if (isNew) {
-                await repo.addTourPackage(updated);
-              } else {
-                await repo.updateTourPackage(updated);
-              }
+              try {
+                final notifier = ref.read(toursCatalogProvider.notifier);
+                if (isNew) {
+                  await notifier.addTourPackage(updated);
+                } else {
+                  await notifier.updateTourPackage(updated);
+                }
 
-              ref.invalidate(tourPackagesAsyncProvider);
+                try {
+                  final admin = ref.read(adminSessionProvider);
+                  await ref.read(auditLogsProvider.notifier).log(
+                    actorEmail: admin.email.isNotEmpty ? admin.email : 'admin@puneexplorer.in',
+                    actorRole: admin.role,
+                    action: isNew ? 'CREATE_TOUR' : 'UPDATE_TOUR',
+                    resourceType: 'TOUR_PACKAGE',
+                    resourceId: updated.id,
+                    metadata: {'title': updated.title, 'price': updated.price},
+                  );
+                } catch (_) {}
 
-              final admin = ref.read(adminSessionProvider);
-              await ref.read(auditLogsProvider.notifier).log(
-                actorEmail: admin.email.isNotEmpty ? admin.email : 'admin@puneexplorer.in',
-                actorRole: admin.role,
-                action: isNew ? 'CREATE_TOUR' : 'UPDATE_TOUR',
-                resourceType: 'TOUR_PACKAGE',
-                resourceId: updated.id,
-                metadata: {'title': updated.title, 'price': updated.price},
-              );
-
-              if (mounted) {
-                messenger.showSnackBar(
-                  SnackBar(content: Text('Tour "${updated.title}" saved! Live pricing applied to booking flow.'), backgroundColor: AppColors.emerald),
-                );
+                if (mounted) {
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Tour "${updated.title}" saved! Live pricing applied to booking flow.'), backgroundColor: AppColors.emerald),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Notice: $e'), backgroundColor: Colors.amber.shade900),
+                  );
+                }
               }
             },
             child: const Text('Save Tour', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
@@ -310,8 +318,12 @@ class _AdminToursScreenState extends ConsumerState<AdminToursScreen> {
                               );
 
                               if (confirm == true) {
-                                await ref.read(destinationRepositoryProvider).deleteTourPackage(tour.id);
-                                ref.invalidate(tourPackagesAsyncProvider);
+                                await ref.read(toursCatalogProvider.notifier).deleteTourPackage(tour.id);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Deleted "${tour.title}"'), backgroundColor: AppColors.emerald),
+                                  );
+                                }
                               }
                             },
                           ),

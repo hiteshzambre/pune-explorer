@@ -198,8 +198,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> with SingleTickerProv
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (nameCtrl.text.trim().isNotEmpty) {
+                final messenger = ScaffoldMessenger.of(context);
+                final nav = Navigator.of(ctx);
                 final newDest = Destination(
                   id: 'dest_${DateTime.now().millisecondsSinceEpoch}',
                   name: nameCtrl.text.trim(),
@@ -224,11 +226,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> with SingleTickerProv
                   isTrending: true,
                 );
 
-                ref.read(destinationRepositoryProvider).addDestination(newDest);
-                ref.invalidate(destinationsAsyncProvider);
-                Navigator.of(ctx).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${newDest.name} added to catalog!')),
+                await ref.read(destinationsCatalogProvider.notifier).addDestination(newDest);
+                nav.pop();
+                messenger.showSnackBar(
+                  SnackBar(content: Text('${newDest.name} added to catalog! Live across app.')),
                 );
               }
             },
@@ -264,8 +265,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> with SingleTickerProv
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (titleCtrl.text.trim().isNotEmpty) {
+                final messenger = ScaffoldMessenger.of(context);
+                final nav = Navigator.of(ctx);
                 final newTour = TourPackage(
                   id: 'tour_${DateTime.now().millisecondsSinceEpoch}',
                   title: titleCtrl.text.trim(),
@@ -289,11 +292,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> with SingleTickerProv
                   accommodationDiscount: 0,
                 );
 
-                ref.read(destinationRepositoryProvider).addTourPackage(newTour);
-                ref.invalidate(tourPackagesAsyncProvider);
-                Navigator.of(ctx).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Tour Package "${newTour.title}" published!')),
+                await ref.read(toursCatalogProvider.notifier).addTourPackage(newTour);
+                nav.pop();
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Tour Package "${newTour.title}" published! Live across app.')),
                 );
               }
             },
@@ -612,12 +614,38 @@ class _AdminScreenState extends ConsumerState<AdminScreen> with SingleTickerProv
                         ),
                         IconButton(
                           icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.grey),
-                          onPressed: () {
-                            ref.read(destinationRepositoryProvider).deleteDestination(dest.id);
-                            ref.invalidate(destinationsAsyncProvider);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Deleted "${dest.name}"')),
+                          tooltip: 'Delete Destination',
+                          onPressed: () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Delete Destination?'),
+                                content: Text('Are you sure you want to permanently delete "${dest.name}" from Supabase?'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+                                    onPressed: () => Navigator.of(ctx).pop(true),
+                                    child: const Text('Delete Permanently', style: TextStyle(color: Colors.white)),
+                                  ),
+                                ],
+                              ),
                             );
+                            if (confirm == true) {
+                              if (!context.mounted) return;
+                              final messenger = ScaffoldMessenger.of(context);
+                              try {
+                                await ref.read(destinationsCatalogProvider.notifier).deleteDestination(dest.id);
+                                await ref.read(favoritesProvider.notifier).remove(dest.id);
+                                messenger.showSnackBar(
+                                  SnackBar(content: Text('Deleted "${dest.name}" from database.'), backgroundColor: AppColors.emerald),
+                                );
+                              } catch (e) {
+                                messenger.showSnackBar(
+                                  SnackBar(content: Text('Failed to delete: $e'), backgroundColor: AppColors.error),
+                                );
+                              }
+                            }
                           },
                         ),
                       ],

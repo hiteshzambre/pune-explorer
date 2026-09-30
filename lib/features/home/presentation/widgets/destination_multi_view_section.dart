@@ -355,20 +355,24 @@ class _DestinationMultiViewSectionState
             const Text('🏔️', style: TextStyle(fontSize: 36)),
             const SizedBox(height: 10),
             Text(
-              'No destinations found in this category.',
+              widget.destinations.isEmpty
+                  ? 'No destinations cataloged yet.'
+                  : 'No destinations found in this category.',
               style: TextStyle(
                 color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 6),
-            TextButton(
-              onPressed: () {
-                setState(() => _selectedCategory = DestinationCategory.all);
-              },
-              child: const Text('Show All Destinations'),
-            ),
+            if (widget.destinations.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              TextButton(
+                onPressed: () {
+                  setState(() => _selectedCategory = DestinationCategory.all);
+                },
+                child: const Text('Show All Destinations'),
+              ),
+            ],
           ],
         ),
       );

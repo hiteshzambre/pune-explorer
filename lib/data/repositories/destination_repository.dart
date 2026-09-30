@@ -55,7 +55,7 @@ class LocalDestinationRepository implements DestinationRepository {
   static const String keyCoupons = 'pune_cms_coupons';
   static const String keyReviews = 'pune_cms_reviews';
 
-  List<Destination> _destinations = List.from(PuneSeedData.destinations);
+  List<Destination> _destinations = [];
   List<TourPackage> _tourPackages = List.from(PuneSeedData.tourPackages);
   List<RouteCircuit> _routes = List.from(PuneSeedData.routes);
   List<HeritageWalk> _heritageWalks = List.from(PuneSeedData.heritageWalks);
@@ -67,9 +67,7 @@ class LocalDestinationRepository implements DestinationRepository {
     if (_isLoaded) return;
     _isLoaded = true;
     try {
-      final prefs = await SharedPreferences.getInstance().timeout(
-        const Duration(milliseconds: 60),
-      );
+      final prefs = await SharedPreferences.getInstance();
 
       // Destinations
       final rawDest = prefs.getString(keyDestinations);
@@ -394,7 +392,7 @@ class LocalDestinationRepository implements DestinationRepository {
   /// Reset all data back to original seed data
   @override
   void resetToSeed() {
-    _destinations = List.from(PuneSeedData.destinations);
+    _destinations = [];
     _tourPackages = List.from(PuneSeedData.tourPackages);
     _routes = List.from(PuneSeedData.routes);
     _heritageWalks = List.from(PuneSeedData.heritageWalks);
